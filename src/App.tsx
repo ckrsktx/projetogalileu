@@ -1,590 +1,358 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { aliens, Alien } from './data/aliens';
+import { cropEntries, cropYears, CropEntry } from './data/cropData';
+import { articles, Article, ArticleSection } from './data/articlesData';
 
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-  prompt(): Promise<void>;
-}
+/* ── threat config ── */
+const TH = {
+  'pacífico':              { l:'Pacífico',      bg:'bg-emerald-50', tx:'text-emerald-700', br:'border-emerald-200', dot:'bg-emerald-500' },
+  'neutro':                { l:'Neutro',         bg:'bg-sky-50',     tx:'text-sky-700',     br:'border-sky-200',     dot:'bg-sky-500' },
+  'perigoso':              { l:'Perigo',         bg:'bg-orange-50',  tx:'text-orange-700',  br:'border-orange-200',  dot:'bg-orange-500' },
+  'extremamente perigoso': { l:'Ameaça Extrema', bg:'bg-red-50',     tx:'text-red-700',     br:'border-red-200',     dot:'bg-red-500' },
+} as const;
 
-const THREAT_META: Record<string, { label: string; color: string; bg: string; border: string; glow: string; icon: string; hex: string }> = {
-  'pacífico':               { label: 'PACÍFICO',              color: 'text-emerald-400', bg: 'bg-emerald-950/60',   border: 'border-emerald-500/50', glow: 'shadow-emerald-500/20', icon: '◈', hex: '#10b981' },
-  'neutro':                 { label: 'NEUTRO',                color: 'text-cyan-400',    bg: 'bg-cyan-950/60',      border: 'border-cyan-500/50',    glow: 'shadow-cyan-500/20',    icon: '◉', hex: '#06b6d4' },
-  'perigoso':               { label: 'PERIGO',                color: 'text-amber-400',   bg: 'bg-amber-950/60',     border: 'border-amber-500/50',   glow: 'shadow-amber-500/20',   icon: '▲', hex: '#f59e0b' },
-  'extremamente perigoso':  { label: 'AMEAÇA EXTREMA',       color: 'text-red-400',     bg: 'bg-red-950/60',       border: 'border-red-600/50',     glow: 'shadow-red-600/30',     icon: '☢', hex: '#ef4444' },
-};
+type Tab = 'aliens' | 'crop' | 'articles';
+type Filter = 'todos' | Alien['ameaca'];
 
-function Scanline() {
-  return (
-    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden opacity-[0.03]">
-      <div className="absolute inset-0"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,80,0.4) 2px, rgba(0,255,80,0.4) 4px)' }} />
-    </div>
-  );
-}
-
-function TypewriterText({ text, speed = 18 }: { text: string; speed?: number }) {
-  const [displayed, setDisplayed] = useState('');
-  const [done, setDone] = useState(false);
+/* ── PWA ── */
+interface BIPEvent extends Event { prompt(): Promise<void>; readonly userChoice: Promise<{outcome:string}>; }
+function usePWA() {
+  const [prompt, setPrompt] = useState<BIPEvent|null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [show, setShow] = useState(false);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   useEffect(() => {
-    setDisplayed('');
-    setDone(false);
-    let i = 0;
-    const iv = setInterval(() => {
-      i++;
-      setDisplayed(text.slice(0, i));
-      if (i >= text.length) { clearInterval(iv); setDone(true); }
-    }, speed);
-    return () => clearInterval(iv);
-  }, [text, speed]);
-  return <span>{displayed}{!done && <span className="animate-pulse text-green-400">█</span>}</span>;
-}
-
-function HexPattern({ seed }: { seed: string }) {
-  const chars = '0123456789ABCDEF';
-  const hash = seed.split('').reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0);
-  const rows = Array.from({ length: 4 }, (_, r) =>
-    Array.from({ length: 20 }, (_, c) => chars[(Math.abs(hash * (r + 1) * (c + 7)) % 16)])
-  );
-  return (
-    <div className="font-mono text-[9px] text-green-900/70 leading-3 select-none overflow-hidden">
-      {rows.map((row, r) => (
-        <div key={r}>{row.join(' ')}</div>
-      ))}
-    </div>
-  );
-}
-
-function isAppInstalled() {
-  return window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true;
-}
-
-function InstallPrompt({
-  canInstall,
-  manualInstall,
-  onInstall,
-  onClose,
-}: {
-  canInstall: boolean;
-  manualInstall: boolean;
-  onInstall: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
-      style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
-      <div className="relative w-full max-w-lg border-2 border-red-600 bg-zinc-950 shadow-2xl shadow-red-950/60">
-        <div className="pointer-events-none absolute -right-5 top-5 rotate-[12deg] border-[3px] border-red-500/50 px-4 py-1 text-xl font-black tracking-[0.18em] text-red-500/40">
-          NÃO INSTALADO
-        </div>
-
-        <div className="border-b border-red-900 bg-red-950/50 px-5 py-3">
-          <div className="text-[9px] uppercase tracking-[0.35em] text-red-500">Sistema Galileu · Download do App</div>
-          <h2 className="mt-1 text-lg font-bold uppercase tracking-[0.18em] text-white [text-shadow:0_2px_8px_rgba(0,0,0,1)]">
-            Instalar arquivo no dispositivo?
-          </h2>
-        </div>
-
-        <div className="space-y-4 px-5 py-5 text-sm leading-relaxed text-zinc-300">
-          <div className="border border-red-900/70 bg-black/50 px-3 py-2 text-xs uppercase tracking-[0.16em] text-red-400">
-            Status detectado: este navegador ainda não fez o download/instalação do app.
-          </div>
-
-          <p>
-            Toda vez que esta página for aberta e o app não estiver instalado, o sistema perguntará se deseja instalar o aplicativo.
-          </p>
-
-          {manualInstall && (
-            <div className="border border-amber-700/70 bg-amber-950/30 p-3 text-xs text-amber-300">
-              Instalação automática não disponível neste navegador agora. Use o menu do navegador e escolha "Adicionar à tela inicial" ou "Instalar app".
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-zinc-800 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            onClick={onClose}
-            className="border border-zinc-700 px-4 py-2 text-xs uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
-          >
-            Agora não
-          </button>
-          <button
-            onClick={onInstall}
-            className="border border-red-500 bg-red-950 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-red-300 shadow-lg shadow-red-950/50 transition-colors hover:bg-red-900 hover:text-white"
-          >
-            {canInstall ? 'Baixar / Instalar App' : 'Ver instruções de instalação'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AlienCard({ alien, onClick }: { alien: Alien; onClick: () => void }) {
-  const tm = THREAT_META[alien.ameaca];
-  const [hover, setHover] = useState(false);
-
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className={`cursor-pointer relative group border ${tm.border} bg-black/80 transition-all duration-300 overflow-hidden ${hover ? `shadow-lg ${tm.glow}` : ''}`}
-      style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}
-    >
-      {/* Corner brackets */}
-      <div className={`absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 ${tm.border} z-10`} />
-      <div className={`absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 ${tm.border} z-10`} />
-      <div className={`absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 ${tm.border} z-10`} />
-      <div className={`absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 ${tm.border} z-10`} />
-
-      {/* Classification stamp */}
-      <div className={`absolute top-2 right-6 z-10 text-[8px] font-bold ${tm.color} opacity-70 tracking-widest rotate-3`}>
-        {tm.icon} {tm.label}
-      </div>
-
-      {/* Image */}
-      <div className="relative bg-black flex items-center justify-center min-h-[220px] overflow-hidden">
-        {/* Hex background noise */}
-        <div className="absolute inset-0 p-2 overflow-hidden opacity-20">
-          <HexPattern seed={alien.id} />
-        </div>
-        {/* Scan line on hover */}
-        {hover && (
-          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-            <div className="absolute w-full h-[2px] bg-green-400/30"
-              style={{ animation: 'scandown 1.2s linear infinite', top: 0 }} />
-          </div>
-        )}
-        <img
-          src={`https://galactic-server.com/WhoVisitEarth2/${alien.imageFile}`}
-          alt={alien.nome}
-          className="relative z-[2] object-contain max-h-[260px] w-auto mx-auto transition-all duration-500"
-          style={{ imageRendering: 'auto', filter: hover ? `drop-shadow(0 0 12px ${tm.hex})` : 'none' }}
-          loading="lazy"
-          onError={(e) => {
-            const el = e.target as HTMLImageElement;
-            el.src = `https://galactic-server.com/WhoVisitEarth2/${alien.imageFile.replace('.png', '.gif')}`;
-          }}
-        />
-        {/* Bottom gradient */}
-        <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-black to-transparent z-[3]" />
-      </div>
-
-      {/* Info */}
-      <div className="px-4 pt-2 pb-4 relative z-[4]">
-        <div className={`text-[9px] tracking-[0.25em] ${tm.color} mb-0.5 uppercase`}>ID-{alien.id.toUpperCase()}</div>
-        <h3 className="text-white text-base font-bold tracking-widest uppercase leading-tight">{alien.nome}</h3>
-        {alien.outrosNomes && (
-          <div className="text-zinc-500 text-[10px] mt-0.5 truncate">AKA: {alien.outrosNomes}</div>
-        )}
-        <div className="mt-2 text-zinc-400 text-[10px] leading-4 line-clamp-2">{alien.origem}</div>
-        <div className="mt-2 flex gap-1.5 flex-wrap">
-          <span className={`text-[9px] px-1.5 py-0.5 border ${tm.border} ${tm.color} ${tm.bg} tracking-wider uppercase`}>{alien.tipo}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Modal({ alien, onClose }: { alien: Alien; onClose: () => void }) {
-  const tm = THREAT_META[alien.ameaca];
-  const ref = useRef<HTMLDivElement>(null);
-  const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setRevealed(true), 300);
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => { clearTimeout(t); document.removeEventListener('keydown', handler); };
-  }, [onClose]);
-
-  const dossierCode = `${alien.id.toUpperCase().slice(0, 3)}-${Math.abs(alien.id.split('').reduce((a, c) => (a * 31 + c.charCodeAt(0)) | 0, 0)) % 9999}-${alien.tipo.length * 37}`;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/90 backdrop-blur-sm p-4 sm:p-8"
-      onClick={onClose}>
-      <div ref={ref}
-        className={`relative w-full max-w-4xl border-2 ${tm.border} bg-zinc-950 my-4`}
-        style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace', boxShadow: `0 0 60px ${tm.hex}22` }}
-        onClick={e => e.stopPropagation()}>
-
-        {/* Corner brackets */}
-        <div className={`absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 ${tm.border}`} />
-        <div className={`absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 ${tm.border}`} />
-        <div className={`absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 ${tm.border}`} />
-        <div className={`absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 ${tm.border}`} />
-
-        {/* Header bar */}
-        <div className={`flex items-center justify-between px-5 py-3 border-b ${tm.border} ${tm.bg}`}>
-          <div className="flex items-center gap-3">
-            <span className={`text-xl ${tm.color}`}>{tm.icon}</span>
-            <div>
-              <div className={`text-[9px] tracking-[0.3em] ${tm.color} uppercase`}>DOSSIER CLASSIFICADO · ACESSO RESTRITO</div>
-              <div className="text-white text-xs tracking-widest uppercase">{dossierCode}</div>
-            </div>
-          </div>
-          <button onClick={onClose}
-            className={`border ${tm.border} ${tm.color} text-xs px-3 py-1 hover:${tm.bg} transition-colors tracking-widest`}>
-            [ESC] FECHAR
-          </button>
-        </div>
-
-        <div className="flex flex-col lg:flex-row">
-          {/* Left: Image */}
-          <div className="lg:w-80 xl:w-96 flex-shrink-0 flex flex-col">
-            <div className="relative bg-black flex items-center justify-center min-h-[320px] border-b lg:border-b-0 lg:border-r border-zinc-800 overflow-hidden">
-              <div className="absolute inset-0 p-3 opacity-10">
-                <HexPattern seed={alien.id + 'modal'} />
-              </div>
-              <img
-                src={`https://galactic-server.com/WhoVisitEarth2/${alien.imageFile}`}
-                alt={alien.nome}
-                className="relative z-10 object-contain max-h-[380px] w-auto"
-                style={{ imageRendering: 'auto', filter: `drop-shadow(0 0 20px ${tm.hex}88)` }}
-                onError={(e) => {
-                  const el = e.target as HTMLImageElement;
-                  el.src = `https://galactic-server.com/WhoVisitEarth2/${alien.imageFile.replace('.png', '.gif')}`;
-                }}
-              />
-            </div>
-
-            {/* Encrypted block */}
-            <div className={`border-t ${tm.border} p-3 bg-black/40`}>
-              <div className={`text-[8px] ${tm.color} tracking-widest mb-1`}>▸ ASSINATURA CRIPTOGRÁFICA</div>
-              <HexPattern seed={alien.id + alien.tipo} />
-            </div>
-
-            {/* Threat meter */}
-            <div className="p-3 border-t border-zinc-800">
-              <div className="text-[9px] text-zinc-500 tracking-widest mb-2">ÍNDICE DE AMEAÇA</div>
-              <div className="flex gap-1">
-                {['pacífico','neutro','perigoso','extremamente perigoso'].map((lvl, i) => {
-                  const lvlIdx = ['pacífico','neutro','perigoso','extremamente perigoso'].indexOf(alien.ameaca);
-                  const active = i <= lvlIdx;
-                  const m = THREAT_META[lvl];
-                  return <div key={lvl} className={`h-2 flex-1 transition-all ${active ? m.bg : 'bg-zinc-800'} border ${active ? m.border : 'border-zinc-700'}`} />;
-                })}
-              </div>
-              <div className={`mt-1.5 text-[9px] font-bold tracking-widest ${tm.color} uppercase`}>{tm.label}</div>
-            </div>
-          </div>
-
-          {/* Right: Info */}
-          <div className="flex-1 overflow-hidden">
-            {/* Title */}
-            <div className="px-6 py-5 border-b border-zinc-800">
-              <div className={`text-[9px] tracking-[0.4em] ${tm.color} mb-1`}>ESPÉCIE ALIENÍGENA · ARQUIVO Nº {dossierCode}</div>
-              <h2 className="text-white text-3xl font-bold tracking-[0.15em] uppercase">{alien.nome}</h2>
-              {alien.outrosNomes && (
-                <div className="text-zinc-400 text-xs mt-1 tracking-wider">Designações alternativas: {alien.outrosNomes}</div>
-              )}
-            </div>
-
-            {/* Fields */}
-            <div className="divide-y divide-zinc-800/60">
-              <div className="px-6 py-3 grid grid-cols-2 gap-x-6 gap-y-1">
-                <div>
-                  <div className="text-[9px] text-zinc-600 tracking-widest uppercase mb-0.5">Classificação</div>
-                  <div className={`text-xs ${tm.color} tracking-wider uppercase`}>{alien.tipo}</div>
-                </div>
-                <div>
-                  <div className="text-[9px] text-zinc-600 tracking-widest uppercase mb-0.5">Aliança / Facção</div>
-                  <div className="text-xs text-zinc-300 tracking-wider">{alien.alianca}</div>
-                </div>
-              </div>
-
-              <div className="px-6 py-3">
-                <div className="text-[9px] text-zinc-600 tracking-widest uppercase mb-1">Origem / Localização</div>
-                <div className="text-xs text-zinc-300 leading-relaxed">{alien.origem}</div>
-              </div>
-
-              <div className="px-6 py-4">
-                <div className="text-[9px] text-zinc-600 tracking-widest uppercase mb-2">Relatório de Inteligência</div>
-                {revealed ? (
-                  <p className="text-sm text-zinc-300 leading-relaxed tracking-wide">{alien.descricao}</p>
-                ) : (
-                  <div className="text-sm text-zinc-300 leading-relaxed tracking-wide">
-                    <TypewriterText text={alien.descricao} speed={4} />
-                  </div>
-                )}
-              </div>
-
-              <div className="px-6 py-4">
-                <div className="text-[9px] text-zinc-600 tracking-widest uppercase mb-2">Características Físicas & Comportamentais</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {alien.caracteristicas.map((c, i) => (
-                    <div key={i} className={`flex items-start gap-2 text-[11px] text-zinc-300`}>
-                      <span className={`${tm.color} mt-0.5 flex-shrink-0`}>›</span>
-                      <span>{c}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className={`mx-6 mb-4 border ${tm.border} ${tm.bg} px-4 py-2.5 flex items-center gap-3`}>
-              <span className={`text-lg ${tm.color}`}>{tm.icon}</span>
-              <div>
-                <div className={`text-[8px] tracking-widest ${tm.color} uppercase`}>Nível de Ameaça para a Terra</div>
-                <div className={`text-xs font-bold tracking-widest ${tm.color} uppercase`}>{tm.label}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function App() {
-  const [search, setSearch] = useState('');
-  const [filterAmeaca, setFilterAmeaca] = useState('todos');
-  const [selected, setSelected] = useState<Alien | null>(null);
-  const [booting, setBooting] = useState(true);
-  const [bootLine, setBootLine] = useState(0);
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
-  const [manualInstall, setManualInstall] = useState(false);
-
-  const bootLines = [
-    '> INICIALIZANDO SISTEMA GALILEU v7.4.1...',
-    '> CARREGANDO BASE DE DADOS GALÁCTICA...',
-    '> DESCRIPTOGRAFANDO ARQUIVOS [████████████] 100%',
-    '> VERIFICANDO ASSINATURAS BIOMÉTRICAS...',
-    '> ACESSO AUTORIZADO · NÍVEL ULTRA-SECRETO',
-    '> CARREGANDO 50 DOSSIÊS ALIENÍGENAS...',
-    '',
-  ];
-
-  useEffect(() => {
-    if (bootLine < bootLines.length) {
-      const t = setTimeout(() => setBootLine(b => b + 1), bootLine === bootLines.length - 1 ? 600 : 280);
-      return () => clearTimeout(t);
-    } else {
-      const t = setTimeout(() => setBooting(false), 300);
-      return () => clearTimeout(t);
-    }
-  }, [bootLine]);
-
-  useEffect(() => {
-    const installed = isAppInstalled();
-    setIsInstalled(installed);
-    localStorage.setItem('galileu-install-status', installed ? 'installed' : 'not-installed');
-
-    if (!installed) {
-      setShowInstallPrompt(true);
-    }
-
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
-      if (!isAppInstalled()) {
-        setShowInstallPrompt(true);
-      }
-    };
-
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setShowInstallPrompt(false);
-      setDeferredPrompt(null);
-      localStorage.setItem('galileu-install-status', 'installed');
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
+    const sa = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+    setInstalled(sa);
+    if (sa) return;
+    const h = (e: Event) => { e.preventDefault(); setPrompt(e as BIPEvent); };
+    window.addEventListener('beforeinstallprompt', h);
+    const t = setTimeout(() => { if (!sa && !sessionStorage.getItem('pwa-x')) setShow(true); }, 5000);
+    return () => { window.removeEventListener('beforeinstallprompt', h); clearTimeout(t); };
   }, []);
+  const doInstall = useCallback(async () => { if (prompt) await prompt.prompt(); setShow(false); sessionStorage.setItem('pwa-x','1'); }, [prompt]);
+  const dismiss = useCallback(() => { setShow(false); sessionStorage.setItem('pwa-x','1'); }, []);
+  return { installed, show, canPrompt: !!prompt, isIOS, doInstall, dismiss };
+}
 
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) {
-      setManualInstall(true);
-      return;
-    }
+const CloseIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+  </svg>
+);
 
-    await deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
+/* ── Alien Modal ── */
+function AlienModal({ alien, onClose }: { alien: Alien; onClose: () => void }) {
+  const t = TH[alien.ameaca];
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', h);
+    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', h); };
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="absolute inset-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-xl sm:max-h-[90vh] sm:rounded-2xl bg-white overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="relative bg-gradient-to-b from-slate-800 to-slate-900 flex items-center justify-center" style={{minHeight:220,maxHeight:300}}>
+          <img src={`https://galactic-server.com/WhoVisitEarth2/${alien.imageFile}`} alt={alien.nome} className="max-h-[260px] w-auto object-contain p-4" onError={e => { (e.target as HTMLImageElement).src = `https://galactic-server.com/WhoVisitEarth2/${alien.imageFile.replace('.png','.gif')}`; }}/>
+          <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/30 text-white flex items-center justify-center"><CloseIcon/></button>
+        </div>
+        <div className="p-4 sm:p-5 space-y-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">{alien.nome}</h2>
+            {alien.outrosNomes && <p className="text-sm text-gray-400 mt-0.5">{alien.outrosNomes}</p>}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${t.bg} ${t.tx} ${t.br}`}><span className={`w-1.5 h-1.5 rounded-full ${t.dot}`}/>{t.l}</span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">{alien.tipo}</span>
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 divide-y divide-gray-100 text-sm">
+            <div className="px-3 py-2 flex gap-3"><span className="text-gray-400 w-14 flex-shrink-0">Origem</span><span className="text-gray-800">{alien.origem}</span></div>
+            <div className="px-3 py-2 flex gap-3"><span className="text-gray-400 w-14 flex-shrink-0">Aliança</span><span className="text-gray-800">{alien.alianca}</span></div>
+          </div>
+          <p className="text-[15px] text-gray-700 leading-relaxed text-justify">{alien.descricao}</p>
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Características</p>
+            <div className="flex flex-wrap gap-1.5">{alien.caracteristicas.map((c,i) => <span key={i} className="px-2.5 py-1 bg-gray-100 rounded-lg text-xs text-gray-700">{c}</span>)}</div>
+          </div>
+        </div>
+        <div className="h-8 sm:h-0"/>
+      </div>
+    </div>
+  );
+}
 
-    if (choice.outcome === 'accepted') {
-      setShowInstallPrompt(false);
-      localStorage.setItem('galileu-install-status', 'install-accepted');
-    } else {
-      setShowInstallPrompt(false);
-      localStorage.setItem('galileu-install-status', 'not-installed');
-    }
-  };
+/* ── Crop Modal ── */
+function CropModal({ entry, onClose }: { entry: CropEntry; onClose: () => void }) {
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', h);
+    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', h); };
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl overflow-hidden rounded-t-2xl" onClick={e => e.stopPropagation()}>
+        <div className="relative bg-black">
+          <img src={entry.src} alt={entry.location} className="w-full max-h-[50vh] object-contain"/>
+          <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/30 text-white flex items-center justify-center"><CloseIcon/></button>
+        </div>
+        <div className="p-4 space-y-2">
+          <h3 className="text-lg font-bold text-gray-900">{entry.location}</h3>
+          <div className="flex gap-2 flex-wrap"><span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">{entry.country}</span><span className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 border border-gray-200">{entry.date}</span></div>
+          <p className="text-sm text-gray-600 leading-relaxed text-justify">{entry.note}</p>
+        </div>
+        <div className="h-6 sm:h-0"/>
+      </div>
+    </div>
+  );
+}
 
-  const filtered = useMemo(() => {
-    return aliens.filter(a => {
-      const q = search.toLowerCase();
-      const matchSearch = !q || a.nome.toLowerCase().includes(q) || a.outrosNomes.toLowerCase().includes(q) || a.origem.toLowerCase().includes(q) || a.tipo.toLowerCase().includes(q);
-      const matchThreat = filterAmeaca === 'todos' || a.ameaca === filterAmeaca;
-      return matchSearch && matchThreat;
-    });
-  }, [search, filterAmeaca]);
+/* ════════════════ APP ════════════════ */
+export default function App() {
+  const [tab, setTab] = useState<Tab>('aliens');
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<Filter>('todos');
+  const [cropYear, setCropYear] = useState<number|null>(null);
+  const [selAlien, setSelAlien] = useState<Alien|null>(null);
+  const [selCrop, setSelCrop] = useState<CropEntry|null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<Article>(articles[0]);
+  const [articleDropdownOpen, setArticleDropdownOpen] = useState(false);
+  const pwa = usePWA();
 
-  const counts = useMemo(() => ({
-    pacifico: aliens.filter(a => a.ameaca === 'pacífico').length,
-    neutro: aliens.filter(a => a.ameaca === 'neutro').length,
-    perigoso: aliens.filter(a => a.ameaca === 'perigoso').length,
-    extremo: aliens.filter(a => a.ameaca === 'extremamente perigoso').length,
+  const list = useMemo(() => aliens.filter(a => {
+    const s = q.toLowerCase();
+    if (s && ![a.nome, a.outrosNomes, a.origem, a.tipo].some(f => f.toLowerCase().includes(s))) return false;
+    if (filter !== 'todos' && a.ameaca !== filter) return false;
+    return true;
+  }), [q, filter]);
+
+  const cnt = useMemo(() => ({
+    all: aliens.length,
+    p: aliens.filter(a => a.ameaca==='pacífico').length,
+    n: aliens.filter(a => a.ameaca==='neutro').length,
+    d: aliens.filter(a => a.ameaca==='perigoso').length,
+    x: aliens.filter(a => a.ameaca==='extremamente perigoso').length,
   }), []);
 
-  if (booting) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-8"
-        style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
-        <div className="max-w-xl w-full">
-          <div className="text-green-500 text-xs mb-6 tracking-widest opacity-60">
-            ████ SISTEMA GALILEU · ACESSO RESTRITO ████
-          </div>
-          {bootLines.slice(0, bootLine).map((line, i) => (
-            <div key={i} className={`text-sm mb-1 ${line === '' ? 'mt-2' : ''} ${i === bootLine - 1 ? 'text-green-300' : 'text-green-600'}`}>
-              {line}
-            </div>
-          ))}
-          {bootLine < bootLines.length && (
-            <span className="text-green-400 animate-pulse text-sm">█</span>
-          )}
-        </div>
-        <Scanline />
-      </div>
-    );
-  }
+  const crops = useMemo(() => cropYear ? cropEntries.filter(e => e.year === cropYear) : cropEntries, [cropYear]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white"
-      style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
-      <Scanline />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
 
-      <style>{`
-        @keyframes scandown {
-          0% { top: -2px; }
-          100% { top: 100%; }
-        }
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-      `}</style>
-
-      {/* Header */}
-      <header className="border-b border-green-900/50 bg-black/90 sticky top-0 z-40">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6">
-          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between py-3 gap-2 overflow-hidden">
-            <div className="pointer-events-none absolute right-8 top-1/2 hidden -translate-y-1/2 rotate-[-9deg] select-none border-[3px] border-red-500/45 px-5 py-1 text-2xl font-black tracking-[0.18em] text-red-500/40 sm:block">
-              TOP SECRET · AMEAÇA EXTREMA
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="w-8 h-8 border-2 border-green-500/60 flex items-center justify-center">
-                <span className="text-green-400 text-xs">◈</span>
-              </div>
-              <div className="relative z-10">
-                <div className="text-[8px] text-green-600 tracking-[0.4em] uppercase [text-shadow:0_0_10px_rgba(0,0,0,1)]">PROJETO GALILEU · ULTRA SECRETO</div>
-                <h1 className="text-white text-sm sm:text-base tracking-[0.2em] uppercase font-bold [text-shadow:0_2px_8px_rgba(0,0,0,1),0_0_18px_rgba(16,185,129,0.35)]">
-                  Quem Visita a Terra — Arquivo de Inteligência Galáctica
-                </h1>
-              </div>
-            </div>
-            <div className="relative z-10 hidden text-right text-[9px] tracking-widest text-green-800 md:block">
-              <div>SYS:GALILEU-7.4.1</div>
-              <div className="text-green-600">REGISTROS: {aliens.length} · ATIVOS</div>
-              <button
-                onClick={() => setShowInstallPrompt(true)}
-                className={`mt-1 border px-2 py-0.5 text-[8px] uppercase tracking-[0.18em] transition-colors ${
-                  isInstalled
-                    ? 'border-emerald-700 text-emerald-500'
-                    : 'border-red-700 text-red-400 hover:bg-red-950/60'
-                }`}
-              >
-                {isInstalled ? 'APP INSTALADO' : 'APP NÃO INSTALADO'}
-              </button>
-            </div>
-          </div>
-          {/* Stats bar — sempre todas visíveis */}
-          <div className="grid grid-cols-5 border-t border-green-900/30">
-            {[
-              { label: 'RAÇAS',          val: aliens.length,    key: 'todos',                  color: 'text-white' },
-              { label: 'PACÍFICOS',      val: counts.pacifico,  key: 'pacífico',               color: 'text-emerald-400' },
-              { label: 'NEUTROS',        val: counts.neutro,    key: 'neutro',                 color: 'text-cyan-400' },
-              { label: 'PERIGOSOS',      val: counts.perigoso,  key: 'perigoso',               color: 'text-amber-400' },
-              { label: 'AMEAÇA EXTREMA', val: counts.extremo,   key: 'extremamente perigoso',  color: 'text-red-400' },
-            ].map(item => (
-              <button
-                key={item.key}
-                onClick={() => setFilterAmeaca(item.key)}
-                className={`px-2 py-2 text-[8px] sm:text-[10px] tracking-widest border-r border-green-900/30 transition-all text-center
-                  ${filterAmeaca === item.key ? `bg-zinc-900 ${item.color}` : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900/50'}`}
-              >
-                <span className={`text-sm sm:text-base font-bold ${item.color} block leading-none mb-0.5`}>{item.val}</span>
-                <span className="block leading-tight">{item.label}</span>
-              </button>
-            ))}
+      {/* ── HEADER ── */}
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="flex items-center h-12 gap-3">
+            <span className="text-xl">🛸</span>
+            <h1 className="text-sm font-bold text-gray-900 flex-1 truncate">Quem Visita a Terra</h1>
           </div>
 
-          {/* Search bar — linha separada */}
-          <div className="flex items-center gap-2 border-t border-green-900/30 px-3 py-1.5">
-            <span className="text-green-700 text-xs">›</span>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="BUSCAR ESPÉCIE, ORIGEM, TIPO..."
-              className="flex-1 bg-transparent text-[11px] text-green-300 placeholder-green-900 tracking-wider outline-none border-none"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="text-zinc-600 hover:text-zinc-400 text-xs">✕</button>
-            )}
-            <span className="text-[10px] text-zinc-700 tracking-widest whitespace-nowrap">
-              {filtered.length}/{aliens.length}
-            </span>
+          {/* tabs row */}
+          <div className="flex border-t border-gray-100">
+            <button onClick={() => { setTab('aliens'); setArticleDropdownOpen(false); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors ${tab === 'aliens' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              👽 <span>Aliens</span>
+            </button>
+            <button onClick={() => { setTab('crop'); setArticleDropdownOpen(false); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors ${tab === 'crop' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              🌾 <span>Crop Circles</span>
+            </button>
+
+            {/* Articles dropdown */}
+            <div className="flex-1 relative">
+              <button onClick={() => { setTab('articles'); setArticleDropdownOpen(!articleDropdownOpen); }}
+                className={`w-full flex items-center justify-center gap-1.5 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors ${tab === 'articles' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                📖 <span>Artigos</span>
+                <svg className={`w-3 h-3 ml-0.5 transition-transform ${articleDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              {articleDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-b-xl shadow-lg z-50 overflow-hidden">
+                  {articles.map(a => (
+                    <button key={a.id} onClick={() => { setSelectedArticle(a); setArticleDropdownOpen(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-xs sm:text-sm flex items-center gap-2 transition-colors ${selectedArticle.id === a.id ? 'bg-purple-50 text-purple-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}>
+                      <span>{a.emoji}</span>
+                      <span>{a.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Grid */}
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
-        {filtered.length === 0 ? (
-          <div className="text-center py-32 text-zinc-700 tracking-widest">
-            <div className="text-4xl mb-4">◉</div>
-            <div>NENHUM REGISTRO ENCONTRADO</div>
+      {/* ────────── ALIENS ────────── */}
+      {tab === 'aliens' && (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-white border-b border-gray-100">
+            <div className="max-w-5xl mx-auto px-4 py-2 flex gap-2 overflow-x-auto">
+              {[
+                { k:'todos' as Filter, l:'Todos', v:cnt.all, cl:'bg-gray-100 text-gray-900 border-gray-200' },
+                { k:'pacífico' as Filter, l:'Pacífico', v:cnt.p, cl:'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { k:'neutro' as Filter, l:'Neutro', v:cnt.n, cl:'bg-sky-50 text-sky-700 border-sky-200' },
+                { k:'perigoso' as Filter, l:'Perigo', v:cnt.d, cl:'bg-orange-50 text-orange-700 border-orange-200' },
+                { k:'extremamente perigoso' as Filter, l:'Extremo', v:cnt.x, cl:'bg-red-50 text-red-700 border-red-200' },
+              ].map(s => (
+                <button key={s.k} onClick={() => setFilter(s.k)}
+                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${filter===s.k ? s.cl+' shadow-sm ring-1 ring-inset ring-black/5' : 'bg-white text-gray-400 border-gray-200'}`}>
+                  {s.v} {s.l}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {filtered.map(alien => (
-              <AlienCard key={alien.id} alien={alien} onClick={() => setSelected(alien)} />
-            ))}
+          <div className="max-w-5xl mx-auto w-full px-4 pt-3 pb-2">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar espécie, origem, tipo…"
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-300 transition"/>
+              {q && <button onClick={() => setQ('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400"><CloseIcon/></button>}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1 px-1">{list.length} de {aliens.length} espécies</p>
           </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-green-900/30 bg-black/50 py-4 mt-8">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="text-[9px] text-zinc-700 tracking-widest">
-            FONTE: <span className="text-green-800">Márcio Rocha</span> · TRADUÇÃO & ANÁLISE: PORTUGUÊS BRASILEIRO
-          </div>
-          <div className="text-[9px] text-zinc-800 tracking-widest">
-            ████ DOCUMENTO CLASSIFICADO · USO INTERNO ████
+          <div className="flex-1 max-w-5xl mx-auto w-full px-4 pb-8">
+            {list.length === 0 ? (
+              <div className="text-center py-16 text-gray-400"><span className="text-3xl block mb-2">🔭</span>Nenhuma espécie encontrada</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
+                {list.map(a => {
+                  const t = TH[a.ameaca];
+                  return (
+                    <button key={a.id} onClick={() => setSelAlien(a)}
+                      className="bg-white rounded-xl border border-gray-200 overflow-hidden text-left active:scale-[0.97] hover:shadow-md hover:-translate-y-0.5 transition-all">
+                      <div className="relative bg-gradient-to-b from-gray-100 to-gray-50 flex items-center justify-center aspect-square p-2">
+                        <img src={`https://galactic-server.com/WhoVisitEarth2/${a.imageFile}`} alt={a.nome} className="max-h-full max-w-full object-contain" loading="lazy" onError={e => { (e.target as HTMLImageElement).src = `https://galactic-server.com/WhoVisitEarth2/${a.imageFile.replace('.png','.gif')}`; }}/>
+                        <span className={`absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full ${t.dot} ring-2 ring-white`}/>
+                      </div>
+                      <div className="px-2.5 py-2">
+                        <p className="text-[13px] font-semibold text-gray-900 leading-tight truncate">{a.nome}</p>
+                        <p className="text-[10px] text-gray-400 truncate mt-0.5">{a.tipo}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* ────────── CROP CIRCLES ────────── */}
+      {tab === 'crop' && (
+        <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-4 space-y-4 pb-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <h2 className="text-base font-bold text-gray-900">🌾 Crop Circles Verificados</h2>
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed text-justify">Formações geométricas documentadas em campos de cultivo. Apenas registros com fotografias autênticas e localizações confirmadas.</p>
+            <p className="text-xs text-gray-400 mt-1">{cropEntries.length} formações · {cropYears[0]}–{cropYears[cropYears.length-1]}</p>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            <button onClick={() => setCropYear(null)} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${!cropYear ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>Todos</button>
+            {cropYears.map(y => {
+              const c = cropEntries.filter(e => e.year === y).length;
+              return (<button key={y} onClick={() => setCropYear(y)} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${cropYear===y ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200'}`}>{y} <span className="opacity-60">({c})</span></button>);
+            })}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
+            {crops.map(e => (
+              <button key={e.id} onClick={() => setSelCrop(e)} className="bg-white rounded-xl border border-gray-200 overflow-hidden text-left active:scale-[0.97] hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <div className="relative aspect-[4/3] bg-gray-900 overflow-hidden">
+                  <img src={e.src} alt={e.location} className="w-full h-full object-cover" loading="lazy"/>
+                  <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-black/50 backdrop-blur text-white text-[10px] font-semibold rounded">{e.year}</span>
+                </div>
+                <div className="p-2.5">
+                  <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{e.location}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{e.country} · {e.date}</p>
+                  <p className="text-[10px] text-amber-600 mt-1 leading-tight line-clamp-2">{e.note}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ────────── ARTICLES ────────── */}
+      {tab === 'articles' && (
+        <div className="flex-1 max-w-3xl mx-auto w-full px-4 py-4 pb-10 space-y-5">
+
+          {/* hero */}
+          <div className={`bg-gradient-to-br ${selectedArticle.color} rounded-2xl p-5 text-white overflow-hidden relative`}>
+            <div className="absolute inset-0 opacity-10" style={{backgroundImage:'radial-gradient(circle at 70% 50%, white 1px, transparent 1px)', backgroundSize:'24px 24px'}}/>
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/60 mb-1">Artigo</p>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">{selectedArticle.emoji} {selectedArticle.title}</h2>
+            <p className="text-sm text-white/90 leading-relaxed text-justify">{selectedArticle.intro}</p>
+          </div>
+
+          {/* fact chips */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {selectedArticle.facts.map((f, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+                <span className="text-xl block mb-1">{f.icon}</span>
+                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">{f.label}</p>
+                <p className="text-xs text-gray-800 font-semibold mt-0.5 leading-tight">{f.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* sections */}
+          {selectedArticle.sections.map((s: ArticleSection) => (
+            <div key={s.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <h3 className="text-base font-bold text-gray-900">{s.title}</h3>
+              </div>
+              {(s.images || s.image) && (
+                <div className={`bg-gray-900 ${s.images && s.images.length > 1 ? 'grid grid-cols-2 gap-px' : ''}`}>
+                  {(s.images ?? [s.image as string]).map((img, index) => (
+                    <img
+                      key={`${s.id}-${index}`}
+                      src={img}
+                      alt={`${s.title} ${index + 1}`}
+                      className="w-full object-contain max-h-64 bg-gray-900"
+                      loading="lazy"
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="px-4 py-3">
+                <p className="text-sm text-gray-700 leading-relaxed text-justify">{s.content}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* source */}
+          <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 flex gap-3 items-start">
+            <span className="text-lg mt-0.5">📚</span>
+            <div>
+              <p className="text-xs font-semibold text-purple-900">{selectedArticle.source.name}</p>
+              <p className="text-xs text-purple-700 mt-0.5 text-justify">{selectedArticle.source.pt}</p>
+              <p className="text-[10px] text-purple-500 mt-1">{selectedArticle.refs}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer ── */}
+      <footer className="border-t border-gray-200 bg-white py-3 mt-auto">
+        <p className="text-center text-[11px] text-gray-400">Fonte: Márcio Rocha · Tradução e análise em Português Brasileiro</p>
       </footer>
 
-      {/* Modal */}
-      {showInstallPrompt && !isInstalled && (
-        <InstallPrompt
-          canInstall={Boolean(deferredPrompt)}
-          manualInstall={manualInstall}
-          onInstall={handleInstallApp}
-          onClose={() => setShowInstallPrompt(false)}
-        />
+      {/* ── Modals ── */}
+      {selAlien && <AlienModal alien={selAlien} onClose={() => setSelAlien(null)}/>}
+      {selCrop && <CropModal entry={selCrop} onClose={() => setSelCrop(null)}/>}
+
+      {/* ── PWA Banner ── */}
+      {pwa.show && !pwa.installed && (
+        <div className="fixed bottom-0 inset-x-0 z-40 p-3">
+          <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-xl border border-gray-200 p-3.5 flex items-center gap-3">
+            <span className="text-2xl flex-shrink-0">📲</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">Adicionar à tela inicial</p>
+              <p className="text-[11px] text-gray-500 leading-tight mt-0.5">{pwa.isIOS ? 'Toque em ⬆ Compartilhar → "Adicionar à Tela de Início"' : 'Acesse rápido direto do celular'}</p>
+            </div>
+            {pwa.canPrompt && <button onClick={pwa.doInstall} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg active:bg-indigo-700 flex-shrink-0">Instalar</button>}
+            <button onClick={pwa.dismiss} className="text-gray-300 flex-shrink-0"><CloseIcon/></button>
+          </div>
+        </div>
       )}
-      {selected && <Modal alien={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

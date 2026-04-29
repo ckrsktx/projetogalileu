@@ -1,21 +1,5 @@
 @import "tailwindcss";
 
-/* Barras de rolagem invisíveis */
-* {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-*::-webkit-scrollbar {
-  display: none;
-}
-
-html {
-  overflow: scroll;
-  scrollbar-width: none;
-}
-
-body {
-  overflow: auto;
-  scrollbar-width: none;
-}
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+body { -webkit-tap-highlight-color: transparent; }
