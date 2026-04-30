@@ -20,6 +20,118 @@ export interface Article {
 
 export const articles: Article[] = [
   {
+    id: 'ovnis-1909',
+    title: 'OVNIs em 1909 — O Mistério dos Dirigíveis',
+    emoji: '🛩️',
+    color: 'from-amber-900 to-yellow-950',
+    intro: 'Relatos de jornais de 1909 documentam luzes misteriosas e dirigíveis fantasmas sobre a Nova Inglaterra nos EUA, muito antes da era da aviação convencional.',
+    facts: [
+      { icon: '📰', label: 'Fontes', value: 'Jornais da época (1909)' },
+      { icon: '📍', label: 'Local', value: 'Nova Inglaterra, EUA' },
+      { icon: '💡', label: 'Fenômeno', value: 'Luzes e dirigíveis misteriosos' },
+      { icon: '⏱️', label: 'Período', value: 'Julho a Dezembro de 1909' },
+      { icon: '👥', label: 'Testemunhas', value: 'Milhares de pessoas' },
+      { icon: '🏠', label: 'Cidades', value: 'Worcester, Willimantic, Norwich' },
+      { icon: '🔦', label: 'Luzes', value: 'Refletores potentes e controlados' },
+      { icon: '🚀', label: 'Velocidade', value: 'Até 80 mph, pairando estático' },
+    ],
+    sections: [
+      {
+        id: 'sandusky',
+        title: 'Luz nos Céus — Sandusky, Ohio (Julho 1909)',
+        content: 'Uma luz, acreditada por muitos estar afixada a um dirigível, atraiu grande atenção nos céus do nordeste por volta das 11h da noite de quinta-feira. A luz variava de tamanho — num minuto grande e brilhante, no seguinte pequena e fraca. Permanecia aparentemente estacionária por momentos e então disparava para leste a uma velocidade impressionante.',
+        image: '/images/airship_1909_town.jpg',
+      },
+      {
+        id: 'mystic-wilmington',
+        title: 'O Dirigível Fantasma — Wilmington, Delaware (Agosto 1909)',
+        content: 'Um dirigível misterioso que só voa à noite estava causando considerável agitação. Durante um mês ou mais, pessoas relataram ver a máquina voadora, mas poucos acreditavam nas histórias. A aeronave tinha formato de balão com asas em cada lado e uma carena em forma de charuto por baixo. O som de um motor era distintamente ouvido por aqueles que viam a máquina. Voava muito alto e muito rápido, movendo-se contra o vento de forma controlada.',
+        image: '/images/dirigible_1909.jpg',
+      },
+      {
+        id: 'explosao-winsted',
+        title: 'Bola de Fogo e Explosões — Winsted, Connecticut (Agosto 1909)',
+        content: 'Centenas de cidadãos foram acordados por uma terrível explosão nas primeiras horas da manhã. O policial noturno Lyman R. Woodworth relatou que os céus foram iluminados por uma bola de fogo vinda do noroeste, desaparecendo sobre a torre da Igreja Metodista. Segundos depois, ouviu-se a explosão. O evento foi corroborado por J. L. Dewey, indicando um fenômeno de grande intensidade.',
+        image: '/images/fireball_1909.jpg',
+      },
+      {
+        id: 'storrs',
+        title: 'Impacto em Storrs — Outubro 1909',
+        content: 'Uma explosão terrível ocorreu em Storrs, Connecticut. Uma bola de fogo gigante descendia em linha reta, sem zig-zag, deixando um rastro de luz de trinta a quarenta pés. O impacto atingiu um poste de telégrafo, estilhaçando-o, e depois penetrou na casa de F. M. Chadwick, arrancando rodapés, quebrando vidros, fazendo buracos nos tetos, sem no entanto causar incêndio. O treinador de futebol Frank McLean declarou: "Palavras não podem descrever a visão nem a natureza daquela explosão."',
+      },
+      {
+        id: 'aeronave-misteriosa',
+        title: 'A Aeronave Misteriosa de Worcester — Dezembro 1909',
+        content: 'A casa do misterioso dirigível que cruzava Massachusetts a altitudes inauditas foi supostamente descoberta em West Boylston, numa propriedade densamente arborizada. Um galpão com mais de 100 pés de comprimento abrigava a aeronave. A máquina, associada a Wallace E. Tillinghast, voava sobre a Nova Inglaterra, cruzando cidades de Marlboro a Boston, atingindo velocidades de 80 mph e pairando estaticamente por 15 minutos. Testemunhas afirmam ter visto dois homens na aeronave — um na proa, perto do farol, e outro na popa, onde uma luz mais fraca queimava.',
+      },
+      {
+        id: 'come-ride',
+        title: '"Venha, Monte no Meu Dirigível!" — Dezembro 1909',
+        content: 'Centenas de pessoas em Willimantic viram uma luz brilhante no leste que acreditavam ser o misterioso dirigível de Tillinghast. A luz parecia um poderoso refletor, permaneceu estacionária por minutos e então subiu, circulando como se o operador estivesse ajustando suas coordenadas. Os céticos não conseguiam explicar a luz estranha e suas peculiaridades. As pessoas que haviam saído para as compras de Natal esqueceram o que tinham vindo fazer e pararam na calçada e no meio da rua olhando para o leste, esperando o retorno do dirigível.',
+        image: '/images/crowd_1909.jpg',
+      },
+      {
+        id: 'norwich',
+        title: 'O Dirigível sobre Norwich — Dezembro 1909',
+        content: 'Entre 19:30 e 20:00, muitos no centro de Norwich observaram um dirigível passando sobre a cidade, indo em direção sul. Não havia ruído audível. As luzes se moviam e eram observadas até desaparecerem. Não era um voo nivelado e estável como o de um pássaro — ocasionalmente o dirigível fazia uma curva e uma segunda luz aparecia de vez em quando. Não era uma estrela, afirmaram positivamente os que o viram.',
+      },
+    ],
+    refs: 'Referências: Project 1947 — 1909 UFO Reports; Sandusky Daily Register; Wilmington Morning News; Willimantic Chronicle; Norwich Bulletin.',
+    source: { name: 'Project 1947', pt: 'Tradução e adaptação para Português Brasileiro por Márcio Rocha.' },
+  },
+  {
+    id: 'reptilianos',
+    title: 'O que são Reptilianos?',
+    emoji: '🦎',
+    color: 'from-green-900 to-emerald-950',
+    intro: 'Uma análise profunda sobre a natureza, características e os padrões de contato com seres extraterrestres de aparência reptiliana, baseada nas pesquisas de David W. Chace.',
+    facts: [
+      { icon: '🦎', label: 'Nomenclatura', value: 'Reptiliano ou Reptoid' },
+      { icon: '👁️', label: 'Olhos', value: 'Pupilas verticais, íris amarela' },
+      { icon: '📏', label: 'Estatura', value: 'Próximo a 2 metros (7 pés)' },
+      { icon: '🤚', label: 'Membros', value: 'Garras, mãos às vezes palmadas' },
+      { icon: '💭', label: 'Contato', value: 'Físico, telepático ou astral' },
+      { icon: '🛸', label: 'Categoria', value: 'Alien ou Criptídeo humanóide' },
+      { icon: '🧬', label: 'Diversidade', value: 'Múltiplas espécies sugeridas' },
+      { icon: '📝', label: 'Marcas', value: 'Arranhões, hematomas, símbolos' },
+    ],
+    sections: [
+      {
+        id: 'definicao',
+        title: 'O que é um Reptiliano?',
+        content: 'Para fins de pesquisa, um reptiliano é um alienígena (extraterrestre, ocupante de OVNI, etc.) ou um criptídeo (criatura não reconhecida cientificamente) com um plano corporal mais ou menos humanoide e uma aparência reptiliana. O termo "reptiliano" é frequentemente usado de forma intercambiável com o termo preferido do pesquisador John Rhodes, "reptoid", que é uma contração de humanoide reptiliano. Em geral, um reptiliano é definido em termos de suas características físicas e/ou semelhanças com outros relatos de reptilianos.',
+        image: '/images/reptilian.jpg',
+      },
+      {
+        id: 'aparencia',
+        title: 'Aparência Física',
+        content: 'O que constitui uma "aparência reptiliana"? Pele coberta por escamas (descritas de várias maneiras), características faciais que lembram um lagarto ou uma cobra, e dedos terminando em garras semelhantes às de lagartos são algumas das características de identificação mais comuns. Outras características, como mãos palmadas, olhos com pupilas em fenda vertical e uma íris amarela brilhante, ou uma constituição muscular e uma altura total próxima a sete pés (aprox. 2,13 metros), ocorrem em muitos casos, sendo também características definidoras.',
+      },
+      {
+        id: 'experiencia',
+        title: 'O que é uma Experiência Reptiliana "Típica"?',
+        content: 'Existem muitos tipos de experiências que as pessoas têm com reptilianos. Como se distingue uma experiência reptiliana de outros tipos de encontros ufológicos ou paranormais? A resposta curta é: se um ou mais reptilianos estão envolvidos, então é uma experiência reptiliana. Os detalhes dessas experiências, incluindo o contexto relevante (quando, onde, circunstâncias, eventos de vida relacionados), são de extrema importância para a pesquisa. Ao estudar reptilianos, estamos essencialmente estudando padrões na experiência humana.',
+      },
+      {
+        id: 'contato-fisico',
+        title: 'Encontros Físicos vs. O Reino Invisível',
+        content: 'Encontros físicos com reptilianos são o mistério central. Como eles se parecem? Qual a altura? De onde vêm? Como entram no nosso mundo? Qual o motivo de interagirem com humanos? Embora um encontro físico seja o mais compreensível, não é necessariamente o mais comum. O contato reptiliano às vezes ocorre durante a meditação — por exemplo, através de uma conversa telepática ou uma visão. Experiências no estado astral (fora do corpo) ou em sonhos também são cruciais. Como disse o Dr. John Mack, é importante começarmos a valorizar nossas experiências com o "reino invisível".',
+      },
+      {
+        id: 'marcas',
+        title: 'Marcas e Lembranças Ocultas',
+        content: 'É importante perceber que um encontro físico pode, em alguns casos, ser lembrado como um sonho. Portanto, esses "sonhos" reptilianos podem se revelar ainda mais relevantes para a questão do contato físico do que poderíamos supor. É vital que os experienciadores desses fenômenos estejam cientes de seus corpos. Marcas no corpo, incluindo hematomas, arranhões, marcas de escavação (scoop marks) e triângulos ou outros símbolos, às vezes podem apontar para uma interação física que foi oculta da memória consciente.',
+      },
+      {
+        id: 'diversidade',
+        title: 'Quantos Tipos Diferentes Existem?',
+        content: 'Como sequer começamos a responder a essa pergunta? Inicialmente, pode-se supor que uma única civilização alienígena estivesse envolvida com a Terra, contendo talvez apenas um punhado de espécies diferentes. No entanto, à medida que os relatos de testemunhas sobre seres reptilianos se acumulam, torna-se evidente que há uma diversidade surpreendente. A pesquisa contínua e a coleta de descrições detalhadas e desenhos feitos pelas testemunhas são essenciais para tentar categorizar e compreender as diferentes espécies ou variações genéticas dentro do fenômeno reptiliano.',
+      },
+    ],
+    refs: 'Referências: David W. Chace — "What is a Reptilian?"; The Alien Jigsaw; John Rhodes.',
+    source: { name: 'Alien Jigsaw', pt: 'Tradução e adaptação para Português Brasileiro por Márcio Rocha.' },
+  },
+  {
     id: 'vril',
     title: 'Vril',
     emoji: '⚡',
